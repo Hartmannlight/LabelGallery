@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Label Gallery</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">LG</div>
+          <div class="brand-text">
+            <span class="brand-title">Label Gallery</span>
+            <span class="brand-sub">Operator Console</span>
+          </div>
+        </div>
+        <div class="printer-block">
+          <label for="printerSelect" class="field-label">Printer</label>
+          <div class="printer-row">
+            <select id="printerSelect" class="select"></select>
+            <button id="printerRefresh" class="ghost">Refresh</button>
+          </div>
+          <div id="printerMeta" class="printer-meta">Loading printers...</div>
+        </div>
+        <div class="top-actions">
+          <button id="shortcutsBtn" class="primary">Shortcuts</button>
+        </div>
+      </header>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab-btn active" data-tab="print" role="tab" aria-selected="true">
+          Print
+        </button>
+        <button class="tab-btn" data-tab="printers" role="tab" aria-selected="false">
+          Printers
+        </button>
+      </nav>
+
+      <main class="content">
+        <section id="printTab" class="tab-panel active" role="tabpanel">
+          <div class="template-pane">
+            <div class="panel-header">
+              <h2>Templates</h2>
+              <p class="panel-sub">
+                Search, filter by tags, and pick a template to fill in variables.
+              </p>
+              <div class="search-row">
+                <input
+                  id="searchInput"
+                  class="input"
+                  type="search"
+                  placeholder="Search templates, tags, or variable names"
+                />
+                <button id="clearSearch" class="ghost">Clear</button>
+              </div>
+              <div id="tagFilters" class="tag-filters"></div>
+            </div>
+            <div id="templateGrid" class="template-grid">
+              <div class="empty-state">
+                <h3>No templates yet</h3>
+                <p>Once the API is running, templates will appear here.</p>
+              </div>
+            </div>
+          </div>
+
+          <aside class="detail-pane">
+            <div id="templateDetail" class="detail-content empty-state">
+              <h3>Select a template to print</h3>
+              <p>Choose a template to see preview, variables, and fast print controls.</p>
+            </div>
+          </aside>
+        </section>
+
+        <section id="printersTab" class="tab-panel" role="tabpanel" aria-hidden="true">
+          <div class="panel-header">
+            <h2>Printer Management</h2>
+            <p class="panel-sub">
+              Review status, loaded media, and adjust printer settings.
+            </p>
+          </div>
+          <div class="printers-layout">
+            <div class="printers-column">
+              <div id="printerGrid" class="printers-grid"></div>
+            </div>
+            <aside class="printer-side">
+              <div class="printer-card add-printer-card">
+                <header>
+                  <div class="printer-title">Add Printer</div>
+                  <div class="printer-sub">Create a new printer configuration.</div>
+                </header>
+                <form id="addPrinterForm" class="printer-form">
+                  <div class="form-section">
+                    <div class="section-title">Basics</div>
+                    <div class="form-grid">
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterId">Printer ID</label>
+                        <input id="addPrinterId" name="id" class="input" type="text" required />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterName">Name</label>
+                        <input id="addPrinterName" name="name" class="input" type="text" required />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterVendor">Vendor</label>
+                        <input id="addPrinterVendor" name="vendor" class="input" type="text" required />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterModel">Model</label>
+                        <input id="addPrinterModel" name="model" class="input" type="text" required />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterDriver">Driver</label>
+                        <select id="addPrinterDriver" name="driver" class="select" required>
+                          <option value="zpl">zpl</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="form-section">
+                    <div class="section-title">Connection</div>
+                    <div class="form-grid">
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterProtocol">Protocol</label>
+                        <select id="addPrinterProtocol" name="protocol" class="select" required>
+                          <option value="raw9100">raw9100</option>
+                        </select>
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterHost">Host</label>
+                        <input id="addPrinterHost" name="host" class="input" type="text" required />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterPort">Port</label>
+                        <input
+                          id="addPrinterPort"
+                          name="port"
+                          class="input"
+                          type="number"
+                          value="9100"
+                          required
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addPrinterTimeout">Timeout (ms)</label>
+                        <input
+                          id="addPrinterTimeout"
+                          name="timeout_ms"
+                          class="input"
+                          type="number"
+                          value="3000"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="form-section">
+                    <div class="section-title">Media</div>
+                    <div class="form-grid">
+                      <div class="form-row">
+                        <label class="field-label" for="addPresetSelect">Label preset</label>
+                        <select id="addPresetSelect" class="select preset-select" name="preset">
+                          <option value="">Select preset</option>
+                        </select>
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addMediaWidth">Width (mm)</label>
+                        <input
+                          id="addMediaWidth"
+                          name="width_mm"
+                          class="input"
+                          type="number"
+                          step="0.1"
+                          required
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addMediaHeight">Height (mm)</label>
+                        <input
+                          id="addMediaHeight"
+                          name="height_mm"
+                          class="input"
+                          type="number"
+                          step="0.1"
+                          required
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addMediaType">Label type</label>
+                        <select id="addMediaType" name="media_type" class="select" required>
+                          <option value="thermal">thermal</option>
+                          <option value="thermotransfer">thermotransfer</option>
+                        </select>
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addMediaColor">Label color</label>
+                        <select id="addMediaColor" name="media_color" class="select" required></select>
+                      </div>
+                    </div>
+                    <div class="variable-hint">
+                      Pick a preset to fill width/height, or enter custom sizes.
+                    </div>
+                  </div>
+
+                  <div class="form-section">
+                    <div class="section-title">Alignment</div>
+                    <div class="form-grid">
+                      <div class="form-row">
+                        <label class="field-label" for="addAlignDpi">DPI</label>
+                        <input
+                          id="addAlignDpi"
+                          name="dpi"
+                          class="input"
+                          type="number"
+                          value="203"
+                          required
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addAlignOffsetX">Offset X (mm)</label>
+                        <input
+                          id="addAlignOffsetX"
+                          name="offset_x_mm"
+                          class="input"
+                          type="number"
+                          step="0.1"
+                          value="0"
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addAlignOffsetY">Offset Y (mm)</label>
+                        <input
+                          id="addAlignOffsetY"
+                          name="offset_y_mm"
+                          class="input"
+                          type="number"
+                          step="0.1"
+                          value="0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <details class="form-section">
+                    <summary class="ghost">Advanced settings</summary>
+                    <div class="form-grid">
+                      <div class="form-row">
+                        <label class="field-label" for="addZplDarkness">Darkness</label>
+                        <input
+                          id="addZplDarkness"
+                          name="darkness"
+                          class="input"
+                          type="number"
+                          value="10"
+                          required
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addZplSpeed">Print speed</label>
+                        <input
+                          id="addZplSpeed"
+                          name="print_speed"
+                          class="input"
+                          type="number"
+                          value="3"
+                          required
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addZplMode">Print mode</label>
+                        <select id="addZplMode" name="print_mode" class="select">
+                          <option value="">Select mode</option>
+                          <option value="tear_off">tear_off</option>
+                          <option value="peel_off">peel_off</option>
+                          <option value="rewind">rewind</option>
+                          <option value="cutter">cutter</option>
+                          <option value="delayed_cut">delayed_cut</option>
+                        </select>
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addCopies">Copies</label>
+                        <input
+                          id="addCopies"
+                          name="copies"
+                          class="input"
+                          type="number"
+                          value="1"
+                          required
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label" for="addRotation">Rotation</label>
+                        <input
+                          id="addRotation"
+                          name="rotation"
+                          class="input"
+                          type="number"
+                          value="0"
+                          required
+                        />
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label">Capabilities</label>
+                        <div class="checkbox-group">
+                          <label class="checkbox-row">
+                            <input type="checkbox" name="supports_status" checked />
+                            Status
+                          </label>
+                          <label class="checkbox-row">
+                            <input type="checkbox" name="supports_graphics" checked />
+                            Graphics
+                          </label>
+                          <label class="checkbox-row">
+                            <input type="checkbox" name="supports_cut" checked />
+                            Cut
+                          </label>
+                        </div>
+                      </div>
+                      <div class="form-row">
+                        <label class="field-label">Enabled</label>
+                        <label class="checkbox-row">
+                          <input type="checkbox" name="enabled" checked />
+                          Ready for use
+                        </label>
+                      </div>
+                    </div>
+                  </details>
+                  <button class="primary" type="submit">Add printer</button>
+                </form>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="shortcutDrawer" class="shortcut-drawer" aria-hidden="true">
+      <div class="shortcut-content">
+        <header class="shortcut-header">
+          <h3>Keyboard Shortcuts</h3>
+          <button id="closeShortcuts" class="ghost">Close</button>
+        </header>
+        <ul class="shortcut-list">
+          <li><span class="shortcut-key">Ctrl + Enter</span> Print the selected template</li>
+          <li><span class="shortcut-key">Alt + F</span> Focus template search</li>
+          <li><span class="shortcut-key">Alt + 1</span> Switch to Print tab</li>
+          <li><span class="shortcut-key">Alt + 2</span> Switch to Printers tab</li>
+          <li><span class="shortcut-key">Alt + Up</span> Previous variable field</li>
+          <li><span class="shortcut-key">Alt + Down</span> Next variable field</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
+
+
+
+
+
+

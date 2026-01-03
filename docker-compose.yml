@@ -1,0 +1,20 @@
+services:
+  labelgallery:
+    build: .
+    ports:
+      - "5174:80"
+    environment:
+      - LG_API_BASE=/api
+      - LG_LABEL_PRESETS=74x26,50x50,50x30,50x25,40x30,30x20
+      - LG_LABEL_COLORS=Weiß,Blau,Orange,Gelb
+    command: >
+      /bin/sh -c "printf 'window.LG_API_BASE=\"%s\";\\nwindow.LG_LABEL_PRESETS=\"%s\";\\nwindow.LG_LABEL_COLORS=\"%s\";\\n' \"$$LG_API_BASE\" \"$$LG_LABEL_PRESETS\" \"$$LG_LABEL_COLORS\" > /usr/share/nginx/html/config.js
+      && nginx -g 'daemon off;'"
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./styles.css:/usr/share/nginx/html/styles.css:ro
+      - ./app.js:/usr/share/nginx/html/app.js:ro
+
+
+
+
