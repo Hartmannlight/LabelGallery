@@ -185,6 +185,21 @@ body::after {
   gap: 20px;
 }
 
+body.draft-mode .tabs,
+body.draft-mode #printersTab,
+body.draft-mode .template-pane,
+body.draft-mode .top-actions {
+  display: none;
+}
+
+body.draft-mode .tab-panel.active {
+  grid-template-columns: 1fr;
+}
+
+body.draft-mode .detail-pane {
+  min-height: auto;
+}
+
 #printersTab.tab-panel.active {
   display: flex;
   flex-direction: column;

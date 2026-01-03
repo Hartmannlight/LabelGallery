@@ -7,6 +7,11 @@ const state = {
   selectedPrinterId: null,
   labelPresets: [],
   labelColors: [],
+  draftId: null,
+  draftDetail: null,
+  draftError: null,
+  draftPreviewUrl: null,
+  draftPreviewLoading: false,
   filters: {
     search: "",
     tags: new Set(),
@@ -204,6 +209,28 @@ function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, "");
 }
 
+function getDraftIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const draftId = params.get("draft_id");
+  return draftId ? draftId.trim() : null;
+}
+
+function enterDraftMode(draftId) {
+  state.draftId = draftId;
+  document.body.classList.add("draft-mode");
+  setActiveTab("print");
+}
+
+function buildApiUrl(path) {
+  const baseUrl = new URL(state.apiBase, window.location.origin);
+  const basePath = baseUrl.pathname.replace(/\/$/, "");
+  const nextPath = path.startsWith("/")
+    ? `${basePath === "/" ? "" : basePath}${path}`
+    : `${basePath === "/" ? "" : `${basePath}/`}${path}`;
+  baseUrl.pathname = nextPath;
+  return baseUrl;
+}
+
 function loadStoredJson(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -232,13 +259,7 @@ function getSelectedTemplateDetail() {
 }
 
 async function apiFetch(path, options = {}) {
-  const baseUrl = new URL(state.apiBase, window.location.origin);
-  const basePath = baseUrl.pathname.replace(/\/$/, "");
-  const nextPath = path.startsWith("/")
-    ? `${basePath === "/" ? "" : basePath}${path}`
-    : `${basePath === "/" ? "" : `${basePath}/`}${path}`;
-  baseUrl.pathname = nextPath;
-  const url = baseUrl;
+  const url = buildApiUrl(path);
   const headers = Object.assign({}, options.headers || {});
   if (options.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
@@ -255,6 +276,20 @@ async function apiFetch(path, options = {}) {
   return response.text();
 }
 
+async function apiFetchBlob(path, options = {}) {
+  const url = buildApiUrl(path);
+  const headers = Object.assign({}, options.headers || {});
+  if (options.body && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+  const response = await fetch(url, Object.assign({}, options, { headers }));
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed: ${response.status}`);
+  }
+  return response.blob();
+}
+
 async function loadPrinters() {
   try {
     const data = await apiFetch("/v1/printers");
@@ -265,7 +300,11 @@ async function loadPrinters() {
     renderPrinterSelect();
     renderPrinterGrid();
     updatePrinterMeta();
-    renderTemplateDetail();
+    if (state.draftId) {
+      renderDraftDetail();
+    } else {
+      renderTemplateDetail();
+    }
   } catch (error) {
     showToast(`Failed to load printers: ${error.message}`);
   }
@@ -677,6 +716,147 @@ function renderTemplateDetail() {
   syncRapidInputValue();
 }
 
+function formatDateTime(value) {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString();
+}
+
+function renderDraftDetail() {
+  if (!state.draftId) {
+    return;
+  }
+  if (state.draftError) {
+    elements.templateDetail.innerHTML = `
+      <div class="empty-state">
+        <h3>Draft not available</h3>
+        <p>${escapeHtml(state.draftError)}</p>
+      </div>
+    `;
+    return;
+  }
+  if (!state.draftDetail) {
+    elements.templateDetail.innerHTML = `
+      <div class="empty-state">
+        <h3>Loading draft...</h3>
+        <p>Fetching the print draft details.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const detail = state.draftDetail;
+  const createdAt = formatDateTime(detail.created_at);
+  const expiresAt = formatDateTime(detail.expires_at);
+  const target = detail.target
+    ? `${detail.target.width_mm} x ${detail.target.height_mm} mm @ ${detail.target.dpi || 203} dpi`
+    : "No target configured";
+  const printer = getSelectedPrinter();
+  const printerLine = printer ? printer.name : "Select a printer from the header.";
+
+  elements.templateDetail.innerHTML = `
+    <div class="detail-header">
+      <h3>Print draft</h3>
+      <div class="detail-tags">
+        <span class="template-tag">Draft ID: ${escapeHtml(detail.draft_id)}</span>
+        ${createdAt ? `<span class="template-tag">Created: ${escapeHtml(createdAt)}</span>` : ""}
+        ${expiresAt ? `<span class="template-tag">Expires: ${escapeHtml(expiresAt)}</span>` : ""}
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="section-title">Preview</div>
+      <div class="template-preview" id="draftPreview">
+        <span class="template-meta">Loading preview...</span>
+      </div>
+      <div class="variable-hint">Target: ${escapeHtml(target)}</div>
+    </div>
+    <div class="detail-section">
+      <div class="section-title">Printer</div>
+      <div class="variable-hint">${escapeHtml(printerLine)}</div>
+    </div>
+    <div class="detail-section">
+      <div class="section-title">Print</div>
+      <div class="detail-actions">
+        <button id="draftPrintBtn" class="primary">Print</button>
+      </div>
+      <div id="draftPrintStatus" class="print-status">Ready to print.</div>
+    </div>
+  `;
+
+  const printBtn = elements.templateDetail.querySelector("#draftPrintBtn");
+  if (printBtn) {
+    printBtn.addEventListener("click", handleDraftPrint);
+  }
+
+  renderDraftPreview(detail);
+}
+
+async function renderDraftPreview(detail) {
+  if (state.draftPreviewLoading || state.draftPreviewUrl) {
+    if (state.draftPreviewUrl) {
+      const previewEl = elements.templateDetail.querySelector("#draftPreview");
+      if (previewEl) {
+        previewEl.innerHTML = `<img src="${state.draftPreviewUrl}" alt="Draft preview" />`;
+      }
+    }
+    return;
+  }
+
+  const previewEl = elements.templateDetail.querySelector("#draftPreview");
+  if (!previewEl) {
+    return;
+  }
+
+  state.draftPreviewLoading = true;
+  try {
+    const payload = {
+      template: detail.template,
+      target: detail.target,
+      variables: detail.variables || {},
+      debug: Boolean(detail.debug),
+    };
+    const blob = await apiFetchBlob("/v1/renders/png", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (state.draftPreviewUrl) {
+      URL.revokeObjectURL(state.draftPreviewUrl);
+    }
+    state.draftPreviewUrl = URL.createObjectURL(blob);
+    previewEl.innerHTML = `<img src="${state.draftPreviewUrl}" alt="Draft preview" />`;
+  } catch (error) {
+    previewEl.innerHTML = `<span class="template-meta">Preview failed: ${escapeHtml(
+      error.message
+    )}</span>`;
+  } finally {
+    state.draftPreviewLoading = false;
+  }
+}
+
+async function loadDraft(draftId) {
+  state.draftError = null;
+  state.draftDetail = null;
+  if (state.draftPreviewUrl) {
+    URL.revokeObjectURL(state.draftPreviewUrl);
+    state.draftPreviewUrl = null;
+  }
+  state.draftPreviewLoading = false;
+  renderDraftDetail();
+  try {
+    const detail = await apiFetch(`/v1/drafts/${encodeURIComponent(draftId)}`);
+    state.draftDetail = detail;
+    renderDraftDetail();
+  } catch (error) {
+    state.draftError = error.message || "Draft not found.";
+    renderDraftDetail();
+  }
+}
+
 function applyMutedState(input) {
   const defaultValue = input.dataset.defaultValue || "";
   const touched = input.dataset.touched === "true";
@@ -744,6 +924,48 @@ async function handlePrint() {
     }
   } catch (error) {
     const statusEl = elements.templateDetail.querySelector("#printStatus");
+    if (statusEl) {
+      statusEl.textContent = `Print failed: ${error.message}`;
+    }
+    showToast(`Print failed: ${error.message}`);
+  }
+}
+
+async function handleDraftPrint() {
+  const detail = state.draftDetail;
+  if (!detail) {
+    showToast("Draft not loaded yet.");
+    return;
+  }
+  const printer = getSelectedPrinter();
+  if (!printer) {
+    showToast("Select a printer before printing.");
+    return;
+  }
+  const payload = {
+    template: detail.template,
+    variables: detail.variables || {},
+    debug: Boolean(detail.debug),
+    return_preview: false,
+  };
+  if (detail.target) {
+    payload.target = detail.target;
+  }
+  try {
+    const response = await apiFetch(
+      `/v1/printers/${encodeURIComponent(printer.id)}/prints/template`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+    const statusEl = elements.templateDetail.querySelector("#draftPrintStatus");
+    if (statusEl) {
+      statusEl.textContent = `Printed to ${response.printer_id}. Bytes sent: ${response.bytes_sent}.`;
+    }
+    showToast(`Printed on ${printer.name}.`);
+  } catch (error) {
+    const statusEl = elements.templateDetail.querySelector("#draftPrintStatus");
     if (statusEl) {
       statusEl.textContent = `Print failed: ${error.message}`;
     }
@@ -1175,6 +1397,9 @@ async function savePrinterMedia(printerId, card) {
 }
 
 function setActiveTab(tabName) {
+  if (state.draftId && tabName !== "print") {
+    return;
+  }
   state.activeTab = tabName;
   elements.tabs.forEach((tab) => {
     const isActive = tab.dataset.tab === tabName;
@@ -1330,7 +1555,11 @@ function attachEvents() {
     state.selectedPrinterId = event.target.value;
     localStorage.setItem("lg:selectedPrinter", state.selectedPrinterId || "");
     updatePrinterMeta();
-    renderTemplateDetail();
+    if (state.draftId) {
+      renderDraftDetail();
+    } else {
+      renderTemplateDetail();
+    }
   });
 
   elements.printerRefresh.addEventListener("click", () => {
@@ -1490,6 +1719,10 @@ function init() {
   state.apiBase = normalizeBaseUrl(configuredBase);
   initPresets();
   initLabelColors();
+  const draftId = getDraftIdFromUrl();
+  if (draftId) {
+    enterDraftMode(draftId);
+  }
   if (elements.addPrinterForm) {
     const presetSelect = elements.addPrinterForm.querySelector(".preset-select");
     if (presetSelect) {
@@ -1506,7 +1739,11 @@ function init() {
   }
   attachEvents();
   loadPrinters();
-  loadTemplates();
+  if (draftId) {
+    loadDraft(draftId);
+  } else {
+    loadTemplates();
+  }
 }
 
 init();
