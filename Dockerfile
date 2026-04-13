@@ -1,12 +1,25 @@
+FROM node:20-alpine AS build
+
+WORKDIR /workspace
+
+COPY printhub-sdk ./printhub-sdk
+COPY LabelGallery ./LabelGallery
+
+WORKDIR /workspace/printhub-sdk
+RUN npm install
+RUN npm run build
+
+WORKDIR /workspace/LabelGallery
+RUN npm install
+RUN npm run build
+
 FROM nginx:1.27-alpine
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY index.html /usr/share/nginx/html/index.html
-COPY config.js /usr/share/nginx/html/config.js
-COPY styles.css /usr/share/nginx/html/styles.css
-COPY app.js /usr/share/nginx/html/app.js
-COPY docker-entrypoint.d/99-labelgallery-config.sh /docker-entrypoint.d/99-labelgallery-config.sh
+RUN apk add --no-cache gettext
 
-RUN chmod +x /docker-entrypoint.d/99-labelgallery-config.sh
+COPY --from=build /workspace/LabelGallery/dist /usr/share/nginx/html
+COPY --from=build /workspace/LabelGallery/nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /workspace/LabelGallery/docker-entrypoint.d/99-labelgallery-config.sh /docker-entrypoint.d/99-labelgallery-config.sh
 
-
+RUN sed -i 's/\r$//' /docker-entrypoint.d/99-labelgallery-config.sh \
+    && chmod +x /docker-entrypoint.d/99-labelgallery-config.sh

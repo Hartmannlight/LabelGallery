@@ -1,3 +1,5 @@
+import { createPrinthubSdk } from "@printhub/sdk";
+
 const state = {
   apiBase: "/api",
   templates: [],
@@ -18,6 +20,23 @@ const state = {
   },
   activeTab: "print",
 };
+
+let gallerySdkCache = null;
+let gallerySdkBaseUrl = "";
+
+function getGallerySdk() {
+  const baseUrl = normalizeBaseUrl(state.apiBase);
+  if (!gallerySdkCache || gallerySdkBaseUrl !== baseUrl) {
+    gallerySdkBaseUrl = baseUrl;
+    gallerySdkCache = createPrinthubSdk({ baseUrl, timeoutMs: 15000 });
+  }
+  return gallerySdkCache;
+}
+
+function parseApiPath(path) {
+  const url = new URL(path, "http://thingdex.local");
+  return { pathname: url.pathname, searchParams: url.searchParams };
+}
 
 const elements = {
   printerSelect: document.getElementById("printerSelect"),
@@ -259,35 +278,54 @@ function getSelectedTemplateDetail() {
 }
 
 async function apiFetch(path, options = {}) {
-  const url = buildApiUrl(path);
-  const headers = Object.assign({}, options.headers || {});
-  if (options.body && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
+  const method = String(options.method || "GET").toUpperCase();
+  const { pathname, searchParams } = parseApiPath(path);
+  const sdk = getGallerySdk();
+
+  if (method === "GET" && pathname === "/v1/printers") {
+    return sdk.printers.list();
   }
-  const response = await fetch(url, Object.assign({}, options, { headers }));
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+  if (method === "GET" && pathname === "/v1/templates") {
+    return sdk.templates.list({ tags: searchParams.get("tags") || undefined });
   }
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    return response.json();
+  if (method === "GET" && pathname.startsWith("/v1/templates/")) {
+    const templateId = decodeURIComponent(pathname.slice("/v1/templates/".length));
+    return sdk.templates.get(templateId);
   }
-  return response.text();
+  if (method === "GET" && pathname.startsWith("/v1/drafts/")) {
+    const draftId = decodeURIComponent(pathname.slice("/v1/drafts/".length));
+    return sdk.drafts.get(draftId);
+  }
+  if (method === "GET" && pathname.endsWith("/status") && pathname.startsWith("/v1/printers/")) {
+    const printerId = decodeURIComponent(pathname.slice("/v1/printers/".length, -"/status".length));
+    return sdk.printers.getStatus(printerId);
+  }
+  if (method === "PUT" && pathname.startsWith("/v1/printers/")) {
+    const printerId = decodeURIComponent(pathname.slice("/v1/printers/".length));
+    return sdk.printers.upsert(printerId, JSON.parse(options.body || "{}"));
+  }
+  if (method === "POST" && pathname.endsWith("/prints/template") && pathname.startsWith("/v1/printers/")) {
+    const printerId = decodeURIComponent(pathname.slice("/v1/printers/".length, -"/prints/template".length));
+    return sdk.printers.printTemplate(printerId, JSON.parse(options.body || "{}"));
+  }
+
+  throw new Error(`Unsupported SDK route: ${method} ${path}`);
 }
 
 async function apiFetchBlob(path, options = {}) {
-  const url = buildApiUrl(path);
-  const headers = Object.assign({}, options.headers || {});
-  if (options.body && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
+  const method = String(options.method || "GET").toUpperCase();
+  const { pathname } = parseApiPath(path);
+  const sdk = getGallerySdk();
+
+  if (method === "POST" && pathname === "/v1/renders/png") {
+    return sdk.renders.renderPng(JSON.parse(options.body || "{}"));
   }
-  const response = await fetch(url, Object.assign({}, options, { headers }));
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+  if (method === "GET" && pathname.endsWith("/preview") && pathname.startsWith("/v1/templates/")) {
+    const templateId = decodeURIComponent(pathname.slice("/v1/templates/".length, -"/preview".length));
+    return sdk.templates.getPreview(templateId);
   }
-  return response.blob();
+
+  throw new Error(`Unsupported SDK blob route: ${method} ${path}`);
 }
 
 async function loadPrinters() {
