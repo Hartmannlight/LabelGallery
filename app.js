@@ -9,6 +9,7 @@ const state = {
   selectedPrinterId: null,
   labelPresets: [],
   labelColors: [],
+  defaultPrinterId: "",
   draftId: null,
   draftDetail: null,
   draftError: null,
@@ -333,7 +334,11 @@ async function loadPrinters() {
     const data = await apiFetch("/v1/printers");
     state.printers = Array.isArray(data.printers) ? data.printers : [];
     const storedPrinter = localStorage.getItem("lg:selectedPrinter");
-    const defaultPrinterId = storedPrinter || (state.printers[0] && state.printers[0].id);
+    const configuredPrinter = state.defaultPrinterId
+      ? state.printers.find((printer) => printer.id === state.defaultPrinterId)
+      : null;
+    const defaultPrinterId =
+      storedPrinter || (configuredPrinter && configuredPrinter.id) || (state.printers[0] && state.printers[0].id);
     state.selectedPrinterId = defaultPrinterId || null;
     renderPrinterSelect();
     renderPrinterGrid();
@@ -1755,6 +1760,8 @@ function init() {
       ? window.LG_API_BASE
       : state.apiBase;
   state.apiBase = normalizeBaseUrl(configuredBase);
+  state.defaultPrinterId =
+    typeof window.LG_DEFAULT_PRINTER_ID === "string" ? window.LG_DEFAULT_PRINTER_ID.trim() : "";
   initPresets();
   initLabelColors();
   const draftId = getDraftIdFromUrl();
